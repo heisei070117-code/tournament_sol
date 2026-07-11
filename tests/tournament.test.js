@@ -77,3 +77,15 @@ test("duplicate names and seeds are rejected", () => {
     { id: "1", name: "A", seed: 1 }, { id: "2", name: "B", seed: 1 },
   ]), /重複/);
 });
+
+test("seed assignment clearly swaps seeded teams and replaces with unseeded teams", () => {
+  let entrants = players(4, 2);
+  entrants = engine.assignSeed(entrants, "p2", 1);
+  assert.equal(entrants.find((p) => p.id === "p2").seed, 1);
+  assert.equal(entrants.find((p) => p.id === "p1").seed, 2);
+
+  entrants = engine.assignSeed(entrants, "p4", 1);
+  assert.equal(entrants.find((p) => p.id === "p4").seed, 1);
+  assert.equal(entrants.find((p) => p.id === "p2").seed, null);
+  assert.equal(entrants.filter((p) => p.seed != null).length, 2);
+});

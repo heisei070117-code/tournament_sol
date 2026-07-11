@@ -49,6 +49,19 @@
     });
   }
 
+  function assignSeed(participants, participantId, seed) {
+    if (!Number.isInteger(seed) || seed < 1) throw new Error("シード番号が不正です。");
+    const selected = participants.find((p) => p.id === participantId);
+    if (!selected) throw new Error("シードへ割り当てる参加者が見つかりません。");
+    if (selected.seed === seed) return participants.map((p) => ({ ...p }));
+    const previousSeed = selected.seed;
+    return participants.map((p) => {
+      if (p.id === participantId) return { ...p, seed };
+      if (p.seed === seed) return { ...p, seed: previousSeed ?? null };
+      return { ...p };
+    });
+  }
+
   function createDraw(participants, random = Math.random) {
     validateParticipants(participants);
     const size = nextPowerOfTwo(participants.length);
@@ -172,5 +185,5 @@
     return buildBracket(slots, next);
   }
 
-  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, createDraw, createManualSlots, buildBracket, setWinner };
+  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, createDraw, createManualSlots, buildBracket, setWinner };
 });

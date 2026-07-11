@@ -85,21 +85,26 @@
     refs.seedCount.max = String(count || 0);
     refs.summary.textContent = count ? `${count}名 · ${E.nextPowerOfTwo(count)}枠 · BYE ${E.nextPowerOfTwo(count) - count}` : "";
     if (!seedCount) { refs.seedEditor.innerHTML = ""; return; }
-    refs.seedEditor.innerHTML = state.participants.map((p) => {
-      const options = ['<option value="">—</option>', ...Array.from({ length: seedCount }, (_, i) => `<option value="${i + 1}" ${p.seed === i + 1 ? "selected" : ""}>第${i + 1}シード</option>`)].join("");
-      return `<label class="seed-row"><span title="${esc(p.name)}">${esc(p.name)}</span><select class="seed-select" data-id="${esc(p.id)}">${options}</select></label>`;
+    const assignments = Array.from({ length: seedCount }, (_, index) => {
+      const seed = index + 1;
+      const assigned = state.participants.find((p) => p.seed === seed);
+      const options = state.participants.map((p) => {
+        const currentLabel = p.seed && p.seed !== seed ? `（現在 第${p.seed}シード）` : "";
+        return `<option value="${esc(p.id)}" ${p.id === assigned?.id ? "selected" : ""}>${esc(p.name)}${currentLabel}</option>`;
+      }).join("");
+      return `<label class="seed-assignment">
+        <span class="seed-number">${seed}</span>
+        <span class="seed-label">第${seed}シード</span>
+        <select class="seed-select" data-seed="${seed}" aria-label="第${seed}シードのチーム">${options}</select>
+      </label>`;
     }).join("");
+    refs.seedEditor.innerHTML = `<div class="seed-editor-head"><strong>シード割り当て</strong><span>チームを選ぶと、割り当て済みの場合は自動で入れ替わります</span></div><div class="seed-assignment-list">${assignments}</div>`;
     refs.seedEditor.querySelectorAll("select").forEach((select) => select.addEventListener("change", handleSeedChange));
   }
 
   function handleSeedChange(event) {
-    const id = event.target.dataset.id;
-    const value = event.target.value ? Number(event.target.value) : null;
-    const other = state.participants.find((p) => p.id !== id && p.seed === value);
-    const current = participant(id);
-    const previous = current.seed;
-    current.seed = value;
-    if (other) other.seed = previous;
+    const seed = Number(event.target.dataset.seed);
+    state.participants = E.assignSeed(state.participants, event.target.value, seed);
     renderSeedEditor(); save();
   }
 
@@ -209,7 +214,8 @@
         const y2 = to.top - bracketRect.top + to.height / 2;
         const middle = x1 + (x2 - x1) / 2;
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("class", "connector-path");
+        const hasAdvanced = Boolean(state.rounds[roundIndex]?.[matchIndex]?.winnerId);
+        path.setAttribute("class", `connector-path${hasAdvanced ? " advanced" : ""}`);
         path.setAttribute("d", `M ${x1} ${y1} H ${middle} V ${y2} H ${x2}`);
         svg.appendChild(path);
       });
@@ -296,7 +302,9 @@
           const startX = x + 190;
           const endX = x + colWidth;
           const middle = startX + (endX - startX) / 2;
-          content += `<path d="M ${startX} ${y + 31} H ${middle} V ${nextY} H ${endX}" fill="none" stroke="#9ca8b8" stroke-width="1.5"/>`;
+          const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
+          const lineWidth = match.winnerId ? "2.5" : "1.5";
+          content += `<path d="M ${startX} ${y + 31} H ${middle} V ${nextY} H ${endX}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}"/>`;
         }
       });
     });
