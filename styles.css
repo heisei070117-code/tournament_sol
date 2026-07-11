@@ -87,6 +87,8 @@ button { cursor: pointer; }
 .round { position: relative; z-index: 1; display: flex; flex-direction: column; width: 210px; }
 .round-title { height: 42px; margin-bottom: 8px; border-bottom: 2px solid #cdd4df; color: #67758a; font-size: 10px; font-weight: 900; letter-spacing: .12em; }
 .round-title strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: 12px; letter-spacing: 0; }
+.preliminary-round .round-title { border-bottom-color: var(--orange); }
+.preliminary-round .match { border-left-color: var(--orange); }
 .round-matches { display: flex; flex: 1; flex-direction: column; justify-content: space-around; gap: 18px; }
 .match { position: relative; min-height: 91px; padding: 7px; border: 1px solid #d5dbe5; border-left: 3px solid #a8b2c2; border-radius: 8px; background: rgba(255,255,255,.96); box-shadow: 0 4px 12px rgba(23,36,60,.06); }
 .match.complete { border-left-color: var(--cyan); }

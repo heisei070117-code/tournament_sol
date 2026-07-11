@@ -70,6 +70,23 @@
     );
   }
 
+  function createDisplayRounds(rounds) {
+    if (!Array.isArray(rounds) || rounds.length === 0) return [];
+    const firstRoundHasByes = rounds[0].some((match) => match.aStatus === "bye" || match.bStatus === "bye");
+    return rounds.map((round, roundIndex) => {
+      const matches = round
+        .map((match, matchIndex) => ({ match, matchIndex }))
+        .filter(({ match }) => !firstRoundHasByes
+          || roundIndex !== 0
+          || (match.aStatus === "ready" && match.bStatus === "ready"));
+      return {
+        roundIndex,
+        isPreliminary: firstRoundHasByes && roundIndex === 0,
+        matches,
+      };
+    });
+  }
+
   function createDraw(participants, random = Math.random) {
     validateParticipants(participants);
     const size = nextPowerOfTwo(participants.length);
@@ -193,5 +210,5 @@
     return buildBracket(slots, next);
   }
 
-  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, isWinningPath, createDraw, createManualSlots, buildBracket, setWinner };
+  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, isWinningPath, createDisplayRounds, createDraw, createManualSlots, buildBracket, setWinner };
 });

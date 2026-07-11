@@ -100,3 +100,22 @@ test("a connector is red only when its team wins the destination match", () => {
   assert.equal(engine.isWinningPath(otherSourceWinner, decidedTarget), false);
   assert.equal(engine.isWinningPath(sourceWinner, undecidedTarget), false);
 });
+
+test("34-team display shows two preliminary matches instead of thirty bye cards", () => {
+  const slots = engine.createDraw(players(34, 8), () => 0.42);
+  const rounds = engine.buildBracket(slots);
+  const displayRounds = engine.createDisplayRounds(rounds);
+
+  assert.equal(displayRounds.length, 6);
+  assert.equal(displayRounds[0].isPreliminary, true);
+  assert.equal(displayRounds[0].matches.length, 2);
+  assert.equal(displayRounds[0].matches.every(({ match }) => match.a && match.b), true);
+  assert.equal(displayRounds[1].matches.length, 16);
+});
+
+test("power-of-two display keeps every first-round match", () => {
+  const slots = engine.createDraw(players(32, 8), () => 0.42);
+  const displayRounds = engine.createDisplayRounds(engine.buildBracket(slots));
+  assert.equal(displayRounds[0].isPreliminary, false);
+  assert.equal(displayRounds[0].matches.length, 16);
+});

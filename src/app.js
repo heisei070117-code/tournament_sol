@@ -35,12 +35,13 @@
   }
 
   function participant(id) { return state.participants.find((item) => item.id === id); }
-  function roundName(index, count) {
-    const remaining = count - index;
-    if (remaining === 1) return "FINAL";
-    if (remaining === 2) return "SEMI FINAL";
-    if (remaining === 3) return "QUARTER FINAL";
-    return `ROUND ${index + 1}`;
+  function roundName(round, displayRound) {
+    if (displayRound.isPreliminary) return "PRELIMINARY";
+    const entrants = round.length * 2;
+    if (entrants === 2) return "FINAL";
+    if (entrants === 4) return "SEMI FINAL";
+    if (entrants === 8) return "QUARTER FINAL";
+    return `ROUND OF ${entrants}`;
   }
 
   function save() {
@@ -200,11 +201,16 @@
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("aria-hidden", "true");
 
-    for (let roundIndex = 0; roundIndex < roundNodes.length - 1; roundIndex += 1) {
-      const currentMatches = [...roundNodes[roundIndex].querySelectorAll(".match")];
-      const nextMatches = [...roundNodes[roundIndex + 1].querySelectorAll(".match")];
-      currentMatches.forEach((matchNode, matchIndex) => {
-        const nextNode = nextMatches[Math.floor(matchIndex / 2)];
+    for (let displayIndex = 0; displayIndex < roundNodes.length - 1; displayIndex += 1) {
+      const currentRoundNode = roundNodes[displayIndex];
+      const nextRoundNode = roundNodes[displayIndex + 1];
+      const roundIndex = Number(currentRoundNode.dataset.round);
+      const nextRoundIndex = Number(nextRoundNode.dataset.round);
+      const currentMatches = [...currentRoundNode.querySelectorAll(".match")];
+      currentMatches.forEach((matchNode) => {
+        const matchIndex = Number(matchNode.dataset.match);
+        const targetMatchIndex = Math.floor(matchIndex / 2);
+        const nextNode = nextRoundNode.querySelector(`.match[data-match="${targetMatchIndex}"]`);
         if (!nextNode) return;
         const from = matchNode.getBoundingClientRect();
         const to = nextNode.getBoundingClientRect();
@@ -215,7 +221,7 @@
         const middle = x1 + (x2 - x1) / 2;
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const sourceMatch = state.rounds[roundIndex]?.[matchIndex];
-        const targetMatch = state.rounds[roundIndex + 1]?.[Math.floor(matchIndex / 2)];
+        const targetMatch = state.rounds[nextRoundIndex]?.[targetMatchIndex];
         const isWinnerRoute = E.isWinningPath(sourceMatch, targetMatch);
         path.setAttribute("class", `connector-path${isWinnerRoute ? " advanced" : ""}`);
         path.setAttribute("d", `M ${x1} ${y1} H ${middle} V ${y2} H ${x2}`);
@@ -235,17 +241,24 @@
     refs.title.textContent = state.name;
     const n = state.participants.length;
     const roundCount = n >= 2 ? Math.log2(E.nextPowerOfTwo(n)) : 0;
-    refs.meta.textContent = n ? `${n} PARTICIPANTS · ${roundCount} ROUNDS${state.mode === "manual" ? " · MANUAL" : ""}` : "NO PARTICIPANTS";
+    refs.meta.textContent = n ? `${n} PARTICIPANTS · ${roundCount} ROUNDS` : "NO PARTICIPANTS";
     refs.empty.hidden = Boolean(state.rounds.length);
     refs.scroller.hidden = !state.rounds.length;
     if (!state.rounds.length) { refs.bracket.innerHTML = ""; return; }
-    refs.bracket.innerHTML = state.rounds.map((round, roundIndex) => {
-      const matches = round.map((match, matchIndex) => `<article class="match ${match.winnerId ? "complete" : ""} ${roundIndex === state.rounds.length - 1 ? "final-match" : ""}" data-round="${roundIndex}" data-match="${matchIndex}">
-        <div class="match-label"><span>MATCH ${matchIndex + 1}</span><span>${match.automatic ? "AUTO" : "BO1"}</span></div>
+    const displayRounds = E.createDisplayRounds(state.rounds);
+    const preliminaryCount = displayRounds[0]?.isPreliminary ? displayRounds[0].matches.length : 0;
+    refs.meta.textContent = `${n} PARTICIPANTS · ${preliminaryCount ? `${preliminaryCount} PRELIMINARY MATCHES · ` : ""}${roundCount} ROUNDS${state.mode === "manual" ? " · MANUAL" : ""}`;
+    refs.bracket.innerHTML = displayRounds.map((displayRound) => {
+      const { roundIndex } = displayRound;
+      const round = state.rounds[roundIndex];
+      const matches = displayRound.matches.map(({ match, matchIndex }, displayMatchIndex) => `<article class="match ${match.winnerId ? "complete" : ""} ${roundIndex === state.rounds.length - 1 ? "final-match" : ""}" data-round="${roundIndex}" data-match="${matchIndex}">
+        <div class="match-label"><span>MATCH ${displayMatchIndex + 1}</span><span>${match.automatic ? "AUTO" : "BO1"}</span></div>
         ${competitorButton(match.a, match.aStatus, match, "A")}${competitorButton(match.b, match.bStatus, match, "B")}
       </article>`).join("");
       const championId = roundIndex === state.rounds.length - 1 ? round[0]?.winnerId : null;
-      return `<section class="round"><div class="round-title"><strong>${roundName(roundIndex, state.rounds.length)}</strong>${round.length} MATCH${round.length > 1 ? "ES" : ""}</div><div class="round-matches">${matches}</div>${championId ? `<div class="champion"><small>CHAMPION</small><strong>${esc(participant(championId)?.name)}</strong></div>` : ""}</section>`;
+      const visibleCount = displayRound.matches.length;
+      const matchSummary = displayRound.isPreliminary ? `${visibleCount} PLAY-IN MATCH${visibleCount > 1 ? "ES" : ""}` : `${round.length} MATCH${round.length > 1 ? "ES" : ""}`;
+      return `<section class="round ${displayRound.isPreliminary ? "preliminary-round" : ""}" data-round="${roundIndex}"><div class="round-title"><strong>${roundName(round, displayRound)}</strong>${matchSummary}</div><div class="round-matches">${matches}</div>${championId ? `<div class="champion"><small>CHAMPION</small><strong>${esc(participant(championId)?.name)}</strong></div>` : ""}</section>`;
     }).join("");
     refs.bracket.querySelectorAll("[data-winner]").forEach((button) => button.addEventListener("click", () => {
       const matchNode = button.closest(".match");
@@ -282,29 +295,38 @@
 
   function exportSvg() {
     if (!state.rounds.length) { showToast("先にトーナメントを作成してください。", true); return; }
-    const colWidth = 250, width = state.rounds.length * colWidth + 70, height = Math.max(500, state.slots.length * 58);
+    const displayRounds = E.createDisplayRounds(state.rounds);
+    const largestVisibleRound = Math.max(...displayRounds.map((displayRound) => displayRound.matches.length));
+    const colWidth = 250;
+    const width = displayRounds.length * colWidth + 70;
+    const height = Math.max(500, largestVisibleRound * 110 + 90);
     const xml = (value) => esc(value);
     let content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f4f6f9"/><style>text{font-family:Arial,sans-serif;fill:#14213d}.head{font-weight:700;font-size:13px}.name{font-size:11px}.muted{fill:#8993a3;font-size:9px}.win{fill:#087d89;font-weight:700}</style><text x="30" y="28" class="head">${xml(state.name)}</text>`;
-    state.rounds.forEach((round, r) => {
-      const x = 30 + r * colWidth;
-      content += `<text x="${x}" y="54" class="muted">${roundName(r, state.rounds.length)}</text>`;
-      round.forEach((match, m) => {
-        const spacing = (height - 90) / round.length;
-        const y = 70 + m * spacing + spacing / 2 - 30;
+    displayRounds.forEach((displayRound, displayIndex) => {
+      const round = state.rounds[displayRound.roundIndex];
+      const x = 30 + displayIndex * colWidth;
+      content += `<text x="${x}" y="54" class="muted">${roundName(round, displayRound)}</text>`;
+      displayRound.matches.forEach(({ match, matchIndex }, visibleMatchIndex) => {
+        const spacing = (height - 90) / displayRound.matches.length;
+        const y = 70 + visibleMatchIndex * spacing + spacing / 2 - 30;
         content += `<rect x="${x}" y="${y}" width="190" height="62" rx="6" fill="white" stroke="#cfd6e0"/><line x1="${x}" y1="${y + 31}" x2="${x + 190}" y2="${y + 31}" stroke="#e5e9ef"/>`;
         [[match.a, match.aStatus, y + 20], [match.b, match.bStatus, y + 51]].forEach(([id, status, ty]) => {
           const p = participant(id); const cls = match.winnerId === id ? "name win" : "name";
           const fallback = status === "pending" ? "対戦相手未確定" : "BYE";
           content += `<text x="${x + 10}" y="${ty}" class="${cls}">${xml(p ? `${p.seed ? `[${p.seed}] ` : ""}${p.name}` : fallback)}</text>`;
         });
-        if (r < state.rounds.length - 1) {
-          const nextRound = state.rounds[r + 1];
-          const nextSpacing = (height - 90) / nextRound.length;
-          const nextY = 70 + Math.floor(m / 2) * nextSpacing + nextSpacing / 2 + 1;
+        if (displayIndex < displayRounds.length - 1) {
+          const nextDisplayRound = displayRounds[displayIndex + 1];
+          const nextRound = state.rounds[nextDisplayRound.roundIndex];
+          const targetMatchIndex = Math.floor(matchIndex / 2);
+          const targetVisibleIndex = nextDisplayRound.matches.findIndex((entry) => entry.matchIndex === targetMatchIndex);
+          if (targetVisibleIndex < 0) return;
+          const nextSpacing = (height - 90) / nextDisplayRound.matches.length;
+          const nextY = 70 + targetVisibleIndex * nextSpacing + nextSpacing / 2 + 1;
           const startX = x + 190;
           const endX = x + colWidth;
           const middle = startX + (endX - startX) / 2;
-          const targetMatch = nextRound[Math.floor(m / 2)];
+          const targetMatch = nextRound[targetMatchIndex];
           const isWinnerRoute = E.isWinningPath(match, targetMatch);
           const lineColor = isWinnerRoute ? "#df3348" : "#9ca8b8";
           const lineWidth = isWinnerRoute ? "2.5" : "1.5";
