@@ -87,6 +87,11 @@
     });
   }
 
+  function getTargetSlotIndex(matchIndex) {
+    if (!Number.isInteger(matchIndex) || matchIndex < 0) throw new Error("試合番号が不正です。");
+    return matchIndex % 2;
+  }
+
   function createDraw(participants, random = Math.random) {
     validateParticipants(participants);
     const size = nextPowerOfTwo(participants.length);
@@ -210,5 +215,5 @@
     return buildBracket(slots, next);
   }
 
-  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, isWinningPath, createDisplayRounds, createDraw, createManualSlots, buildBracket, setWinner };
+  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, isWinningPath, createDisplayRounds, getTargetSlotIndex, createDraw, createManualSlots, buildBracket, setWinner };
 });

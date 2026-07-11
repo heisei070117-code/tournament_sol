@@ -190,7 +190,7 @@
   function drawConnectors() {
     refs.bracket.querySelector(".bracket-connectors")?.remove();
     const roundNodes = [...refs.bracket.querySelectorAll(".round")];
-    if (roundNodes.length < 2) return;
+    if (!roundNodes.length) return;
     const bracketRect = refs.bracket.getBoundingClientRect();
     const width = refs.bracket.scrollWidth;
     const height = refs.bracket.scrollHeight;
@@ -201,31 +201,62 @@
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("aria-hidden", "true");
 
-    for (let displayIndex = 0; displayIndex < roundNodes.length - 1; displayIndex += 1) {
+    function appendPath(d, advanced = false) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("class", `connector-path${advanced ? " advanced" : ""}`);
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    }
+
+    for (let displayIndex = 0; displayIndex < roundNodes.length; displayIndex += 1) {
       const currentRoundNode = roundNodes[displayIndex];
-      const nextRoundNode = roundNodes[displayIndex + 1];
+      const nextRoundNode = roundNodes[displayIndex + 1] ?? null;
       const roundIndex = Number(currentRoundNode.dataset.round);
-      const nextRoundIndex = Number(nextRoundNode.dataset.round);
+      const nextRoundIndex = nextRoundNode ? Number(nextRoundNode.dataset.round) : null;
       const currentMatches = [...currentRoundNode.querySelectorAll(".match")];
       currentMatches.forEach((matchNode) => {
         const matchIndex = Number(matchNode.dataset.match);
-        const targetMatchIndex = Math.floor(matchIndex / 2);
-        const nextNode = nextRoundNode.querySelector(`.match[data-match="${targetMatchIndex}"]`);
-        if (!nextNode) return;
-        const from = matchNode.getBoundingClientRect();
-        const to = nextNode.getBoundingClientRect();
-        const x1 = from.right - bracketRect.left;
-        const y1 = from.top - bracketRect.top + from.height / 2;
-        const x2 = to.left - bracketRect.left;
-        const y2 = to.top - bracketRect.top + to.height / 2;
-        const middle = x1 + (x2 - x1) / 2;
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const sourceMatch = state.rounds[roundIndex]?.[matchIndex];
-        const targetMatch = state.rounds[nextRoundIndex]?.[targetMatchIndex];
-        const isWinnerRoute = E.isWinningPath(sourceMatch, targetMatch);
-        path.setAttribute("class", `connector-path${isWinnerRoute ? " advanced" : ""}`);
-        path.setAttribute("d", `M ${x1} ${y1} H ${middle} V ${y2} H ${x2}`);
-        svg.appendChild(path);
+        const competitorNodes = [...matchNode.querySelectorAll(".competitor")];
+        if (!sourceMatch || competitorNodes.length !== 2) return;
+
+        const matchRect = matchNode.getBoundingClientRect();
+        const competitorRects = competitorNodes.map((node) => node.getBoundingClientRect());
+        const startPoints = competitorRects.map((rect) => ({
+          x: rect.right - bracketRect.left,
+          y: rect.top - bracketRect.top + rect.height / 2,
+        }));
+        const joinX = matchRect.right - bracketRect.left + 14;
+        const joinY = (startPoints[0].y + startPoints[1].y) / 2;
+
+        // 対戦する2チームからそれぞれ線を出し、カード右側で合流させる。
+        appendPath(`M ${startPoints[0].x} ${startPoints[0].y} H ${joinX} V ${startPoints[1].y} H ${startPoints[1].x}`);
+
+        // 勝者側の枝だけを合流点まで赤く重ねる。
+        const winnerSide = sourceMatch.winnerId === sourceMatch.a ? 0 : sourceMatch.winnerId === sourceMatch.b ? 1 : -1;
+        if (winnerSide >= 0) {
+          const winnerPoint = startPoints[winnerSide];
+          appendPath(`M ${winnerPoint.x} ${winnerPoint.y} H ${joinX} V ${joinY}`, true);
+        }
+
+        if (nextRoundNode) {
+          const targetMatchIndex = Math.floor(matchIndex / 2);
+          const nextNode = nextRoundNode.querySelector(`.match[data-match="${targetMatchIndex}"]`);
+          const targetCompetitor = nextNode?.querySelectorAll(".competitor")[E.getTargetSlotIndex(matchIndex)];
+          if (!nextNode || !targetCompetitor) return;
+          const targetRect = targetCompetitor.getBoundingClientRect();
+          const targetX = targetRect.left - bracketRect.left;
+          const targetY = targetRect.top - bracketRect.top + targetRect.height / 2;
+          const elbowX = joinX + (targetX - joinX) / 2;
+          const targetMatch = state.rounds[nextRoundIndex]?.[targetMatchIndex];
+          appendPath(
+            `M ${joinX} ${joinY} H ${elbowX} V ${targetY} H ${targetX}`,
+            E.isWinningPath(sourceMatch, targetMatch),
+          );
+        } else {
+          // 決勝は次戦がないため、合流点から短い優勝ラインを出す。
+          appendPath(`M ${joinX} ${joinY} H ${joinX + 20}`, Boolean(sourceMatch.winnerId));
+        }
       });
     }
     refs.bracket.prepend(svg);
@@ -315,6 +346,17 @@
           const fallback = status === "pending" ? "対戦相手未確定" : "BYE";
           content += `<text x="${x + 10}" y="${ty}" class="${cls}">${xml(p ? `${p.seed ? `[${p.seed}] ` : ""}${p.name}` : fallback)}</text>`;
         });
+        const startX = x + 190;
+        const joinX = startX + 14;
+        const topY = y + 16;
+        const bottomY = y + 47;
+        const joinY = (topY + bottomY) / 2;
+        content += `<path d="M ${startX} ${topY} H ${joinX} V ${bottomY} H ${startX}" fill="none" stroke="#9ca8b8" stroke-width="1.5"/>`;
+        const winnerSide = match.winnerId === match.a ? 0 : match.winnerId === match.b ? 1 : -1;
+        if (winnerSide >= 0) {
+          const winnerY = winnerSide === 0 ? topY : bottomY;
+          content += `<path d="M ${startX} ${winnerY} H ${joinX} V ${joinY}" fill="none" stroke="#df3348" stroke-width="2.5"/>`;
+        }
         if (displayIndex < displayRounds.length - 1) {
           const nextDisplayRound = displayRounds[displayIndex + 1];
           const nextRound = state.rounds[nextDisplayRound.roundIndex];
@@ -322,15 +364,19 @@
           const targetVisibleIndex = nextDisplayRound.matches.findIndex((entry) => entry.matchIndex === targetMatchIndex);
           if (targetVisibleIndex < 0) return;
           const nextSpacing = (height - 90) / nextDisplayRound.matches.length;
-          const nextY = 70 + targetVisibleIndex * nextSpacing + nextSpacing / 2 + 1;
-          const startX = x + 190;
+          const nextCardY = 70 + targetVisibleIndex * nextSpacing + nextSpacing / 2 - 30;
+          const targetY = nextCardY + (E.getTargetSlotIndex(matchIndex) === 0 ? 16 : 47);
           const endX = x + colWidth;
-          const middle = startX + (endX - startX) / 2;
+          const middle = joinX + (endX - joinX) / 2;
           const targetMatch = nextRound[targetMatchIndex];
           const isWinnerRoute = E.isWinningPath(match, targetMatch);
           const lineColor = isWinnerRoute ? "#df3348" : "#9ca8b8";
           const lineWidth = isWinnerRoute ? "2.5" : "1.5";
-          content += `<path d="M ${startX} ${y + 31} H ${middle} V ${nextY} H ${endX}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}"/>`;
+          content += `<path d="M ${joinX} ${joinY} H ${middle} V ${targetY} H ${endX}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}"/>`;
+        } else {
+          const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
+          const lineWidth = match.winnerId ? "2.5" : "1.5";
+          content += `<path d="M ${joinX} ${joinY} H ${joinX + 20}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}"/>`;
         }
       });
     });

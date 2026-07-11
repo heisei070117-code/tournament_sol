@@ -119,3 +119,10 @@ test("power-of-two display keeps every first-round match", () => {
   assert.equal(displayRounds[0].isPreliminary, false);
   assert.equal(displayRounds[0].matches.length, 16);
 });
+
+test("adjacent matches connect to the top and bottom slots of the same next match", () => {
+  assert.equal(engine.getTargetSlotIndex(0), 0);
+  assert.equal(engine.getTargetSlotIndex(1), 1);
+  assert.equal(engine.getTargetSlotIndex(12), 0);
+  assert.equal(engine.getTargetSlotIndex(13), 1);
+});
