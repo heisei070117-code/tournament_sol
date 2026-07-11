@@ -33,8 +33,40 @@ test("bye advances automatically and winner flows to the next round", () => {
   const slots = ["p1", null, "p2", "p3"];
   let rounds = engine.buildBracket(slots);
   assert.equal(rounds[0][0].winnerId, "p1");
+  assert.equal(rounds[1][0].winnerId, null);
+  assert.equal(rounds[1][0].bStatus, "pending");
   rounds = engine.setWinner(slots, rounds, 0, 1, "p3");
   assert.deepEqual([rounds[1][0].a, rounds[1][0].b], ["p1", "p3"]);
+});
+
+test("an undecided previous match is not mistaken for a bye", () => {
+  const rounds = engine.buildBracket(["p1", null, "p2", "p3"]);
+  assert.equal(rounds[1][0].a, "p1");
+  assert.equal(rounds[1][0].b, null);
+  assert.equal(rounds[1][0].bStatus, "pending");
+  assert.equal(rounds[1][0].automatic, false);
+  assert.equal(rounds[1][0].winnerId, null);
+});
+
+test("34-team draw has exactly two preliminary matches and no double byes", () => {
+  const entrants = players(34, 8);
+  const slots = engine.createDraw(entrants, () => 0.42);
+  const firstRoundPairs = Array.from({ length: 32 }, (_, i) => slots.slice(i * 2, i * 2 + 2));
+  assert.equal(firstRoundPairs.filter((pair) => pair.every(Boolean)).length, 2);
+  assert.equal(firstRoundPairs.filter((pair) => pair.every((slot) => slot == null)).length, 0);
+  assert.equal(firstRoundPairs.filter((pair) => pair.filter(Boolean).length === 1).length, 30);
+
+  const rounds = engine.buildBracket(slots);
+  assert.equal(rounds[0].filter((match) => match.automatic).length, 30);
+  assert.equal(rounds[1].filter((match) => match.automatic).length, 0);
+  assert.equal(rounds[1].filter((match) => match.winnerId != null).length, 0);
+});
+
+test("manual initial placement also distributes byes one per match", () => {
+  const slots = engine.createManualSlots(players(34, 8));
+  const pairs = Array.from({ length: 32 }, (_, i) => slots.slice(i * 2, i * 2 + 2));
+  assert.equal(pairs.filter((pair) => pair.every((slot) => slot == null)).length, 0);
+  assert.equal(pairs.filter((pair) => pair.every(Boolean)).length, 2);
 });
 
 test("duplicate names and seeds are rejected", () => {

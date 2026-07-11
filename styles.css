@@ -69,14 +69,14 @@ button { cursor: pointer; }
 .bracket-meta { margin: 7px 0 0; color: #68758a; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 .workspace-actions { display: flex; gap: 7px; }
 .bracket-scroller { overflow: auto; padding: 5px 5px 32px; }
-.bracket { display: flex; align-items: stretch; gap: 56px; min-width: max-content; min-height: 590px; }
-.round { display: flex; flex-direction: column; width: 210px; }
+.bracket { position: relative; display: flex; align-items: stretch; gap: 56px; min-width: max-content; min-height: 590px; }
+.bracket-connectors { position: absolute; inset: 0; z-index: 0; overflow: visible; pointer-events: none; }
+.connector-path { fill: none; stroke: #9ca8b8; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.round { position: relative; z-index: 1; display: flex; flex-direction: column; width: 210px; }
 .round-title { height: 42px; margin-bottom: 8px; border-bottom: 2px solid #cdd4df; color: #67758a; font-size: 10px; font-weight: 900; letter-spacing: .12em; }
 .round-title strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: 12px; letter-spacing: 0; }
 .round-matches { display: flex; flex: 1; flex-direction: column; justify-content: space-around; gap: 18px; }
 .match { position: relative; min-height: 91px; padding: 7px; border: 1px solid #d5dbe5; border-left: 3px solid #a8b2c2; border-radius: 8px; background: rgba(255,255,255,.96); box-shadow: 0 4px 12px rgba(23,36,60,.06); }
-.match::after { content: ""; position: absolute; right: -57px; top: 50%; width: 56px; border-top: 1px solid #bdc5d1; }
-.round:last-child .match::after { display: none; }
 .match.complete { border-left-color: var(--cyan); }
 .match.final-match { border-left-color: var(--orange); }
 .match-label { display: flex; justify-content: space-between; padding: 0 5px 5px; color: #99a2b1; font-size: 8px; font-weight: 800; }
@@ -88,6 +88,7 @@ button { cursor: pointer; }
 .competitor .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .competitor .check { color: var(--cyan); font-size: 13px; font-weight: 900; }
 .bye { color: #a6afbc; font-style: italic; }
+.pending { color: #7b8798; background: repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(148,163,184,.08) 5px, rgba(148,163,184,.08) 10px); }
 .champion { margin-top: auto; padding: 16px; border: 1px solid #ffd2b4; border-radius: 9px; background: linear-gradient(135deg,#fff7f0,#fff); text-align: center; }
 .champion small { color: #c2682c; font-size: 9px; font-weight: 900; letter-spacing: .13em; }
 .champion strong { display: block; margin-top: 6px; font-size: 15px; }
@@ -128,5 +129,4 @@ button { cursor: pointer; }
   .bracket-scroller { overflow: visible; }
   .bracket { gap: 25px; transform-origin: top left; }
   .round { width: 180px; }
-  .match::after { right: -26px; width: 25px; }
 }

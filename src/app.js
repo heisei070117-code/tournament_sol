@@ -21,6 +21,7 @@
   };
   let manualDraft = [];
   let toastTimer;
+  let connectorFrame;
 
   function esc(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -153,6 +154,11 @@
     if (ids.length !== expected.length || new Set(ids).size !== ids.length || expected.some((id) => !ids.includes(id))) {
       showToast("全参加者を重複なく1回ずつ配置してください。", true); return;
     }
+    const hasDoubleBye = Array.from({ length: manualDraft.length / 2 }, (_, index) => manualDraft.slice(index * 2, index * 2 + 2))
+      .some((pair) => pair.every((id) => id == null));
+    if (hasDoubleBye) {
+      showToast("同じ1回戦にBYEを2枠置くことはできません。BYEを別の試合へ分散してください。", true); return;
+    }
     state.slots = manualDraft.slice();
     state.rounds = E.buildBracket(state.slots);
     state.mode = "manual";
@@ -161,15 +167,59 @@
     renderBracket(); save(); showToast("手動配置を確定しました。");
   }
 
-  function competitorButton(id, match, side) {
+  function competitorButton(id, status, match, side) {
     const p = participant(id);
-    if (!p) return `<button class="competitor bye" disabled><span class="name">BYE</span></button>`;
-    const canChoose = match.a && match.b;
+    if (!p) {
+      const pending = status === "pending";
+      return `<button class="competitor ${pending ? "pending" : "bye"}" disabled><span class="name">${pending ? "対戦相手未確定" : "BYE"}</span></button>`;
+    }
+    const canChoose = match.aStatus === "ready" && match.bStatus === "ready";
     const winner = match.winnerId === id;
     return `<button class="competitor ${winner ? "winner" : ""}" data-winner="${esc(id)}" ${canChoose ? "" : "disabled"} aria-label="${esc(p.name)}を勝者にする">
       ${p.seed ? `<span class="seed-badge">${p.seed}</span>` : `<span class="seed-badge">${side}</span>`}
       <span class="name">${esc(p.name)}</span>${winner ? '<span class="check">✓</span>' : ""}
     </button>`;
+  }
+
+  function drawConnectors() {
+    refs.bracket.querySelector(".bracket-connectors")?.remove();
+    const roundNodes = [...refs.bracket.querySelectorAll(".round")];
+    if (roundNodes.length < 2) return;
+    const bracketRect = refs.bracket.getBoundingClientRect();
+    const width = refs.bracket.scrollWidth;
+    const height = refs.bracket.scrollHeight;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "bracket-connectors");
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("aria-hidden", "true");
+
+    for (let roundIndex = 0; roundIndex < roundNodes.length - 1; roundIndex += 1) {
+      const currentMatches = [...roundNodes[roundIndex].querySelectorAll(".match")];
+      const nextMatches = [...roundNodes[roundIndex + 1].querySelectorAll(".match")];
+      currentMatches.forEach((matchNode, matchIndex) => {
+        const nextNode = nextMatches[Math.floor(matchIndex / 2)];
+        if (!nextNode) return;
+        const from = matchNode.getBoundingClientRect();
+        const to = nextNode.getBoundingClientRect();
+        const x1 = from.right - bracketRect.left;
+        const y1 = from.top - bracketRect.top + from.height / 2;
+        const x2 = to.left - bracketRect.left;
+        const y2 = to.top - bracketRect.top + to.height / 2;
+        const middle = x1 + (x2 - x1) / 2;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", "connector-path");
+        path.setAttribute("d", `M ${x1} ${y1} H ${middle} V ${y2} H ${x2}`);
+        svg.appendChild(path);
+      });
+    }
+    refs.bracket.prepend(svg);
+  }
+
+  function scheduleConnectors() {
+    cancelAnimationFrame(connectorFrame);
+    connectorFrame = requestAnimationFrame(() => requestAnimationFrame(drawConnectors));
   }
 
   function renderBracket() {
@@ -184,7 +234,7 @@
     refs.bracket.innerHTML = state.rounds.map((round, roundIndex) => {
       const matches = round.map((match, matchIndex) => `<article class="match ${match.winnerId ? "complete" : ""} ${roundIndex === state.rounds.length - 1 ? "final-match" : ""}" data-round="${roundIndex}" data-match="${matchIndex}">
         <div class="match-label"><span>MATCH ${matchIndex + 1}</span><span>${match.automatic ? "AUTO" : "BO1"}</span></div>
-        ${competitorButton(match.a, match, "A")}${competitorButton(match.b, match, "B")}
+        ${competitorButton(match.a, match.aStatus, match, "A")}${competitorButton(match.b, match.bStatus, match, "B")}
       </article>`).join("");
       const championId = roundIndex === state.rounds.length - 1 ? round[0]?.winnerId : null;
       return `<section class="round"><div class="round-title"><strong>${roundName(roundIndex, state.rounds.length)}</strong>${round.length} MATCH${round.length > 1 ? "ES" : ""}</div><div class="round-matches">${matches}</div>${championId ? `<div class="champion"><small>CHAMPION</small><strong>${esc(participant(championId)?.name)}</strong></div>` : ""}</section>`;
@@ -196,6 +246,7 @@
         renderBracket(); save();
       } catch (error) { showToast(error.message, true); }
     }));
+    scheduleConnectors();
   }
 
   function clearResults() {
@@ -233,11 +284,20 @@
         const spacing = (height - 90) / round.length;
         const y = 70 + m * spacing + spacing / 2 - 30;
         content += `<rect x="${x}" y="${y}" width="190" height="62" rx="6" fill="white" stroke="#cfd6e0"/><line x1="${x}" y1="${y + 31}" x2="${x + 190}" y2="${y + 31}" stroke="#e5e9ef"/>`;
-        [[match.a, y + 20], [match.b, y + 51]].forEach(([id, ty]) => {
+        [[match.a, match.aStatus, y + 20], [match.b, match.bStatus, y + 51]].forEach(([id, status, ty]) => {
           const p = participant(id); const cls = match.winnerId === id ? "name win" : "name";
-          content += `<text x="${x + 10}" y="${ty}" class="${cls}">${xml(p ? `${p.seed ? `[${p.seed}] ` : ""}${p.name}` : "BYE")}</text>`;
+          const fallback = status === "pending" ? "対戦相手未確定" : "BYE";
+          content += `<text x="${x + 10}" y="${ty}" class="${cls}">${xml(p ? `${p.seed ? `[${p.seed}] ` : ""}${p.name}` : fallback)}</text>`;
         });
-        if (r < state.rounds.length - 1) content += `<line x1="${x + 190}" y1="${y + 31}" x2="${x + colWidth}" y2="${y + 31}" stroke="#b9c2cf"/>`;
+        if (r < state.rounds.length - 1) {
+          const nextRound = state.rounds[r + 1];
+          const nextSpacing = (height - 90) / nextRound.length;
+          const nextY = 70 + Math.floor(m / 2) * nextSpacing + nextSpacing / 2 + 1;
+          const startX = x + 190;
+          const endX = x + colWidth;
+          const middle = startX + (endX - startX) / 2;
+          content += `<path d="M ${startX} ${y + 31} H ${middle} V ${nextY} H ${endX}" fill="none" stroke="#9ca8b8" stroke-width="1.5"/>`;
+        }
       });
     });
     content += "</svg>";
@@ -291,5 +351,7 @@
   refs.print.addEventListener("click", () => window.print());
   refs.importButton.addEventListener("click", () => refs.importInput.click());
   refs.importInput.addEventListener("change", () => refs.importInput.files[0] && importJson(refs.importInput.files[0]));
+  window.addEventListener("resize", scheduleConnectors);
+  window.addEventListener("beforeprint", drawConnectors);
   load();
 })();

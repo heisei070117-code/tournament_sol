@@ -63,12 +63,27 @@
     });
 
     const byeCount = size - participants.length;
+    const firstRoundMatches = Array.from({ length: size / 2 }, (_, matchIndex) => {
+      const indices = [matchIndex * 2, matchIndex * 2 + 1];
+      const occupied = indices.filter((index) => slots[index] != null);
+      const bestSeed = occupied
+        .map((index) => participants.find((p) => p.id === slots[index])?.seed ?? Number.MAX_SAFE_INTEGER)
+        .sort((a, b) => a - b)[0] ?? Number.MAX_SAFE_INTEGER;
+      return { matchIndex, indices, occupied, bestSeed };
+    });
+
+    // BYEは1試合につき最大1枠にする。これにより「BYE対BYE」が生まれず、
+    // 一部の参加者だけが余分なラウンドを自動通過する偏りを防ぐ。
+    const seededByeMatches = firstRoundMatches
+      .filter((match) => match.occupied.length === 1)
+      .sort((a, b) => a.bestSeed - b.bestSeed);
+    const emptyMatches = shuffle(firstRoundMatches.filter((match) => match.occupied.length === 0), random);
+    const byeMatches = [...seededByeMatches, ...emptyMatches].slice(0, byeCount);
+    const byeSlots = new Set(byeMatches.map((match) => {
+      if (match.occupied.length === 1) return match.indices.find((index) => slots[index] == null);
+      return match.indices[random() < 0.5 ? 0 : 1];
+    }));
     const open = slots.map((value, index) => (value == null ? index : -1)).filter((index) => index >= 0);
-    const preferredByes = seeded
-      .map((participant) => order.indexOf(participant.seed) ^ 1)
-      .filter((index) => slots[index] == null);
-    const remainingByeCandidates = open.filter((index) => !preferredByes.includes(index));
-    const byeSlots = new Set([...preferredByes, ...shuffle(remainingByeCandidates, random)].slice(0, byeCount));
     const playableSlots = open.filter((index) => !byeSlots.has(index));
     shuffle(unseeded, random).forEach((participant, index) => {
       slots[playableSlots[index]] = participant.id;
@@ -79,7 +94,15 @@
   function createManualSlots(participants) {
     validateParticipants(participants);
     const size = nextPowerOfTwo(participants.length);
-    return [...participants.map((p) => p.id), ...Array(size - participants.length).fill(null)];
+    const byeCount = size - participants.length;
+    const ids = participants.map((p) => p.id);
+    const slots = [];
+    let cursor = 0;
+    for (let matchIndex = 0; matchIndex < size / 2; matchIndex += 1) {
+      slots.push(ids[cursor++]);
+      slots.push(matchIndex < byeCount ? null : ids[cursor++]);
+    }
+    return slots;
   }
 
   function buildBracket(slots, priorRounds = []) {
@@ -87,31 +110,60 @@
       throw new Error("トーナメント枠が不正です。");
     }
     const rounds = [];
-    let entrants = slots.slice();
+    let entrants = slots.map((id) => id == null
+      ? { id: null, status: "bye" }
+      : { id, status: "ready" });
     const roundCount = Math.log2(slots.length);
     for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
       const matches = [];
       for (let i = 0; i < entrants.length; i += 2) {
-        const a = entrants[i] ?? null;
-        const b = entrants[i + 1] ?? null;
+        const aEntry = entrants[i] ?? { id: null, status: "bye" };
+        const bEntry = entrants[i + 1] ?? { id: null, status: "bye" };
+        const a = aEntry.status === "ready" ? aEntry.id : null;
+        const b = bEntry.status === "ready" ? bEntry.id : null;
         const oldWinner = priorRounds[roundIndex]?.[i / 2]?.winnerId ?? null;
-        let winnerId = oldWinner;
+        let winnerId = null;
         let automatic = false;
-        if (a && !b) { winnerId = a; automatic = true; }
-        else if (!a && b) { winnerId = b; automatic = true; }
-        else if (!a && !b) winnerId = null;
-        else if (winnerId !== a && winnerId !== b) winnerId = null;
-        matches.push({ id: `r${roundIndex}-m${i / 2}`, a, b, winnerId, automatic });
+        let outputStatus = "pending";
+        if (aEntry.status === "ready" && bEntry.status === "bye") {
+          winnerId = a;
+          automatic = true;
+          outputStatus = "ready";
+        } else if (aEntry.status === "bye" && bEntry.status === "ready") {
+          winnerId = b;
+          automatic = true;
+          outputStatus = "ready";
+        } else if (aEntry.status === "bye" && bEntry.status === "bye") {
+          outputStatus = "bye";
+        } else if (aEntry.status === "ready" && bEntry.status === "ready") {
+          winnerId = oldWinner === a || oldWinner === b ? oldWinner : null;
+          outputStatus = winnerId ? "ready" : "pending";
+        }
+        matches.push({
+          id: `r${roundIndex}-m${i / 2}`,
+          a,
+          b,
+          aStatus: aEntry.status,
+          bStatus: bEntry.status,
+          winnerId,
+          automatic,
+          outputStatus,
+        });
       }
       rounds.push(matches);
-      entrants = matches.map((match) => match.winnerId);
+      entrants = matches.map((match) => ({ id: match.winnerId, status: match.outputStatus }));
     }
     return rounds;
   }
 
   function setWinner(slots, rounds, roundIndex, matchIndex, winnerId) {
     const target = rounds[roundIndex]?.[matchIndex];
-    if (!target || (winnerId !== target.a && winnerId !== target.b)) throw new Error("勝者が試合参加者と一致しません。");
+    if (!target
+      || target.aStatus !== "ready"
+      || target.bStatus !== "ready"
+      || (winnerId !== target.a && winnerId !== target.b)) {
+      throw new Error("勝者が試合参加者と一致しません。");
+    }
     const next = rounds.map((round) => round.map((match) => ({ ...match })));
     next[roundIndex][matchIndex].winnerId = winnerId;
     for (let r = roundIndex + 1; r < next.length; r += 1) {
