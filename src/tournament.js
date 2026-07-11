@@ -62,6 +62,14 @@
     });
   }
 
+  function isWinningPath(sourceMatch, targetMatch) {
+    return Boolean(
+      sourceMatch?.winnerId
+      && targetMatch?.winnerId
+      && sourceMatch.winnerId === targetMatch.winnerId
+    );
+  }
+
   function createDraw(participants, random = Math.random) {
     validateParticipants(participants);
     const size = nextPowerOfTwo(participants.length);
@@ -185,5 +193,5 @@
     return buildBracket(slots, next);
   }
 
-  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, createDraw, createManualSlots, buildBracket, setWinner };
+  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, isWinningPath, createDraw, createManualSlots, buildBracket, setWinner };
 });

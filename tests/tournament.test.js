@@ -89,3 +89,14 @@ test("seed assignment clearly swaps seeded teams and replaces with unseeded team
   assert.equal(entrants.find((p) => p.id === "p2").seed, null);
   assert.equal(entrants.filter((p) => p.seed != null).length, 2);
 });
+
+test("a connector is red only when its team wins the destination match", () => {
+  const sourceWinner = { winnerId: "p1" };
+  const otherSourceWinner = { winnerId: "p2" };
+  const decidedTarget = { winnerId: "p1" };
+  const undecidedTarget = { winnerId: null };
+
+  assert.equal(engine.isWinningPath(sourceWinner, decidedTarget), true);
+  assert.equal(engine.isWinningPath(otherSourceWinner, decidedTarget), false);
+  assert.equal(engine.isWinningPath(sourceWinner, undecidedTarget), false);
+});

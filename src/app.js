@@ -214,8 +214,10 @@
         const y2 = to.top - bracketRect.top + to.height / 2;
         const middle = x1 + (x2 - x1) / 2;
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const hasAdvanced = Boolean(state.rounds[roundIndex]?.[matchIndex]?.winnerId);
-        path.setAttribute("class", `connector-path${hasAdvanced ? " advanced" : ""}`);
+        const sourceMatch = state.rounds[roundIndex]?.[matchIndex];
+        const targetMatch = state.rounds[roundIndex + 1]?.[Math.floor(matchIndex / 2)];
+        const isWinnerRoute = E.isWinningPath(sourceMatch, targetMatch);
+        path.setAttribute("class", `connector-path${isWinnerRoute ? " advanced" : ""}`);
         path.setAttribute("d", `M ${x1} ${y1} H ${middle} V ${y2} H ${x2}`);
         svg.appendChild(path);
       });
@@ -302,8 +304,10 @@
           const startX = x + 190;
           const endX = x + colWidth;
           const middle = startX + (endX - startX) / 2;
-          const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
-          const lineWidth = match.winnerId ? "2.5" : "1.5";
+          const targetMatch = nextRound[Math.floor(m / 2)];
+          const isWinnerRoute = E.isWinningPath(match, targetMatch);
+          const lineColor = isWinnerRoute ? "#df3348" : "#9ca8b8";
+          const lineWidth = isWinnerRoute ? "2.5" : "1.5";
           content += `<path d="M ${startX} ${y + 31} H ${middle} V ${nextY} H ${endX}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}"/>`;
         }
       });
