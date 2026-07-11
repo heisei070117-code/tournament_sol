@@ -1,0 +1,47 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const engine = require("../src/tournament.js");
+
+const players = (count, seeds = 0) => Array.from({ length: count }, (_, i) => ({
+  id: `p${i + 1}`,
+  name: `Player ${i + 1}`,
+  seed: i < seeds ? i + 1 : null,
+}));
+
+test("nextPowerOfTwo calculates bracket size", () => {
+  assert.equal(engine.nextPowerOfTwo(2), 2);
+  assert.equal(engine.nextPowerOfTwo(7), 8);
+  assert.equal(engine.nextPowerOfTwo(17), 32);
+});
+
+test("seedOrder separates top seeds", () => {
+  assert.deepEqual(engine.seedOrder(8), [1, 8, 4, 5, 2, 7, 3, 6]);
+});
+
+test("draw keeps every participant exactly once and favors seeded byes", () => {
+  const entrants = players(6, 2);
+  const slots = engine.createDraw(entrants, () => 0.5);
+  assert.equal(slots.length, 8);
+  assert.deepEqual(slots.filter(Boolean).sort(), entrants.map((p) => p.id).sort());
+  assert.equal(slots[0], "p1");
+  assert.equal(slots[4], "p2");
+  assert.equal(slots[1], null);
+  assert.equal(slots[5], null);
+});
+
+test("bye advances automatically and winner flows to the next round", () => {
+  const slots = ["p1", null, "p2", "p3"];
+  let rounds = engine.buildBracket(slots);
+  assert.equal(rounds[0][0].winnerId, "p1");
+  rounds = engine.setWinner(slots, rounds, 0, 1, "p3");
+  assert.deepEqual([rounds[1][0].a, rounds[1][0].b], ["p1", "p3"]);
+});
+
+test("duplicate names and seeds are rejected", () => {
+  assert.throws(() => engine.validateParticipants([
+    { id: "1", name: "A", seed: 1 }, { id: "2", name: "A", seed: 2 },
+  ]), /重複/);
+  assert.throws(() => engine.validateParticipants([
+    { id: "1", name: "A", seed: 1 }, { id: "2", name: "B", seed: 1 },
+  ]), /重複/);
+});
