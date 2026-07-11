@@ -66,6 +66,14 @@
     return Boolean(match?.winnerId);
   }
 
+  function continuesWinningPath(sourceMatch, targetMatch) {
+    return Boolean(
+      sourceMatch?.winnerId
+      && targetMatch?.winnerId
+      && sourceMatch.winnerId === targetMatch.winnerId
+    );
+  }
+
   function createDisplayRounds(rounds) {
     if (!Array.isArray(rounds) || rounds.length === 0) return [];
     const firstRoundHasByes = rounds[0].some((match) => match.aStatus === "bye" || match.bStatus === "bye");
@@ -259,5 +267,5 @@
     return next;
   }
 
-  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, hasAdvancedWinner, createDisplayRounds, getTargetSlotIndex, createBracketLayout, createDraw, createManualSlots, buildBracket, setWinner, setScore };
+  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, hasAdvancedWinner, continuesWinningPath, createDisplayRounds, getTargetSlotIndex, createBracketLayout, createDraw, createManualSlots, buildBracket, setWinner, setScore };
 });

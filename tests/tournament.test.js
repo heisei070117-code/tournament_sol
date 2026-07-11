@@ -96,6 +96,13 @@ test("an outgoing connector becomes active when its source match has a winner", 
   assert.equal(engine.hasAdvancedWinner(null), false);
 });
 
+test("the final vertical segment is active only if the team also wins the next match", () => {
+  const source = { winnerId: "p1" };
+  assert.equal(engine.continuesWinningPath(source, { winnerId: "p1" }), true);
+  assert.equal(engine.continuesWinningPath(source, { winnerId: "p2" }), false);
+  assert.equal(engine.continuesWinningPath(source, { winnerId: null }), false);
+});
+
 test("34-team display shows two preliminary matches instead of thirty bye cards", () => {
   const slots = engine.createDraw(players(34, 8), () => 0.42);
   const rounds = engine.buildBracket(slots);

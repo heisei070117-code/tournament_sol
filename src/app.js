@@ -46,20 +46,6 @@
     return `ROUND OF ${entrants}`;
   }
 
-  function cardEdgeConnectorPath(startX, startY, laneX, outerY, targetX, targetY) {
-    const firstDirection = outerY >= startY ? 1 : -1;
-    const finalDirection = targetY >= outerY ? 1 : -1;
-    const radius = Math.min(
-      6,
-      Math.abs(outerY - startY) / 2,
-      Math.abs(targetY - outerY) / 2,
-      Math.max(0, laneX - startX) / 2,
-      Math.max(0, targetX - laneX) / 2,
-    );
-    if (radius < 1) return `M ${startX} ${startY} H ${laneX} V ${outerY} H ${targetX} V ${targetY}`;
-    return `M ${startX} ${startY} H ${laneX - radius} Q ${laneX} ${startY} ${laneX} ${startY + firstDirection * radius} V ${outerY - firstDirection * radius} Q ${laneX} ${outerY} ${laneX + radius} ${outerY} H ${targetX - radius} Q ${targetX} ${outerY} ${targetX} ${outerY + finalDirection * radius} V ${targetY}`;
-  }
-
   function singleBendConnectorPath(startX, startY, targetX, targetY) {
     const direction = targetY >= startY ? 1 : -1;
     const radius = Math.min(6, Math.max(0, targetX - startX) / 2, Math.abs(targetY - startY) / 2);
@@ -274,15 +260,13 @@
           const targetSlot = E.getTargetSlotIndex(matchIndex);
           const targetX = targetRect.left - bracketRect.left + targetRect.width / 2;
           const targetY = (targetSlot === 0 ? targetRect.top : targetRect.bottom) - bracketRect.top;
-          const outerY = targetY + (targetSlot === 0 ? -14 : 14);
-          const laneX = targetRect.left - bracketRect.left - (targetSlot === 0 ? 30 : 16);
-          const hasClearApproach = targetSlot === 0 ? joinY <= targetY - 8 : joinY >= targetY + 8;
-          appendPath(
-            hasClearApproach
-              ? singleBendConnectorPath(joinX, joinY, targetX, targetY)
-              : cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY),
-            E.hasAdvancedWinner(sourceMatch),
-          );
+          const targetMatch = state.rounds[roundIndex + 1]?.[targetMatchIndex];
+          const connectorPath = singleBendConnectorPath(joinX, joinY, targetX, targetY);
+          appendPath(connectorPath);
+          if (E.hasAdvancedWinner(sourceMatch)) {
+            if (E.continuesWinningPath(sourceMatch, targetMatch)) appendPath(connectorPath, true);
+            else appendPath(`M ${joinX} ${joinY} H ${targetX}`, true);
+          }
         } else {
           // 決勝は次戦がないため、合流点から短い優勝ラインを出す。
           appendPath(`M ${joinX} ${joinY} H ${joinX + 20}`, Boolean(sourceMatch.winnerId));
@@ -417,16 +401,17 @@
           const nextCardX = x + colWidth;
           const targetX = nextCardX + 95;
           const targetY = nextCardY + (targetSlot === 0 ? 0 : 62);
-          const outerY = targetY + (targetSlot === 0 ? -14 : 14);
-          const laneX = nextCardX - (targetSlot === 0 ? 30 : 16);
-          const hasClearApproach = targetSlot === 0 ? joinY <= targetY - 8 : joinY >= targetY + 8;
           const hasAdvanced = E.hasAdvancedWinner(match);
-          const lineColor = hasAdvanced ? "#df3348" : "#9ca8b8";
-          const lineWidth = hasAdvanced ? "2.5" : "1.5";
-          const connectorPath = hasClearApproach
-            ? singleBendConnectorPath(joinX, joinY, targetX, targetY)
-            : cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY);
-          content += `<path d="${connectorPath}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
+          const targetMatch = state.rounds[nextDisplayRound.roundIndex]?.[targetMatchIndex];
+          const connectorPath = singleBendConnectorPath(joinX, joinY, targetX, targetY);
+          content += `<path d="${connectorPath}" fill="none" stroke="#9ca8b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+          if (hasAdvanced) {
+            if (E.continuesWinningPath(match, targetMatch)) {
+              content += `<path d="${connectorPath}" fill="none" stroke="#df3348" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+            } else {
+              content += `<path d="M ${joinX} ${joinY} H ${targetX}" fill="none" stroke="#df3348" stroke-width="2.5" stroke-linecap="round"/>`;
+            }
+          }
         } else {
           const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
           const lineWidth = match.winnerId ? "2.5" : "1.5";
