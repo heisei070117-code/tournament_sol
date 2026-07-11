@@ -44,16 +44,18 @@
     return `ROUND OF ${entrants}`;
   }
 
-  function orthogonalConnectorPath(startX, startY, bendX, targetY, targetX) {
-    const direction = targetY >= startY ? 1 : -1;
+  function cardEdgeConnectorPath(startX, startY, laneX, outerY, targetX, targetY) {
+    const firstDirection = outerY >= startY ? 1 : -1;
+    const finalDirection = targetY >= outerY ? 1 : -1;
     const radius = Math.min(
-      7,
-      Math.abs(targetY - startY) / 2,
-      Math.max(0, bendX - startX) / 2,
-      Math.max(0, targetX - bendX) / 2,
+      6,
+      Math.abs(outerY - startY) / 2,
+      Math.abs(targetY - outerY) / 2,
+      Math.max(0, laneX - startX) / 2,
+      Math.max(0, targetX - laneX) / 2,
     );
-    if (radius < 1) return `M ${startX} ${startY} H ${bendX} V ${targetY} H ${targetX}`;
-    return `M ${startX} ${startY} H ${bendX - radius} Q ${bendX} ${startY} ${bendX} ${startY + direction * radius} V ${targetY - direction * radius} Q ${bendX} ${targetY} ${bendX + radius} ${targetY} H ${targetX}`;
+    if (radius < 1) return `M ${startX} ${startY} H ${laneX} V ${outerY} H ${targetX} V ${targetY}`;
+    return `M ${startX} ${startY} H ${laneX - radius} Q ${laneX} ${startY} ${laneX} ${startY + firstDirection * radius} V ${outerY - firstDirection * radius} Q ${laneX} ${outerY} ${laneX + radius} ${outerY} H ${targetX - radius} Q ${targetX} ${outerY} ${targetX} ${outerY + finalDirection * radius} V ${targetY}`;
   }
 
   function save() {
@@ -256,11 +258,12 @@
           if (!nextNode) return;
           const targetRect = nextNode.getBoundingClientRect();
           const targetSlot = E.getTargetSlotIndex(matchIndex);
-          const targetX = targetRect.left - bracketRect.left;
-          const targetY = (targetSlot === 0 ? targetRect.top + 3 : targetRect.bottom - 3) - bracketRect.top;
-          const bendX = targetX - (targetSlot === 0 ? 30 : 16);
+          const targetX = targetRect.left - bracketRect.left + targetRect.width / 2;
+          const targetY = (targetSlot === 0 ? targetRect.top : targetRect.bottom) - bracketRect.top;
+          const outerY = targetY + (targetSlot === 0 ? -14 : 14);
+          const laneX = targetRect.left - bracketRect.left - (targetSlot === 0 ? 30 : 16);
           appendPath(
-            orthogonalConnectorPath(joinX, joinY, bendX, targetY, targetX),
+            cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY),
             E.hasAdvancedWinner(sourceMatch),
           );
         } else {
@@ -375,13 +378,15 @@
           const nextSpacing = (height - 90) / nextDisplayRound.matches.length;
           const nextCardY = 70 + targetVisibleIndex * nextSpacing + nextSpacing / 2 - 30;
           const targetSlot = E.getTargetSlotIndex(matchIndex);
-          const targetY = nextCardY + (targetSlot === 0 ? 3 : 59);
-          const endX = x + colWidth;
-          const bendX = endX - (targetSlot === 0 ? 30 : 16);
+          const nextCardX = x + colWidth;
+          const targetX = nextCardX + 95;
+          const targetY = nextCardY + (targetSlot === 0 ? 0 : 62);
+          const outerY = targetY + (targetSlot === 0 ? -14 : 14);
+          const laneX = nextCardX - (targetSlot === 0 ? 30 : 16);
           const hasAdvanced = E.hasAdvancedWinner(match);
           const lineColor = hasAdvanced ? "#df3348" : "#9ca8b8";
           const lineWidth = hasAdvanced ? "2.5" : "1.5";
-          content += `<path d="${orthogonalConnectorPath(joinX, joinY, bendX, targetY, endX)}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
+          content += `<path d="${cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY)}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
         } else {
           const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
           const lineWidth = match.winnerId ? "2.5" : "1.5";
