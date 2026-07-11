@@ -88,6 +88,34 @@
     return matchIndex % 2;
   }
 
+  function createBracketLayout(rounds) {
+    if (!Array.isArray(rounds) || rounds.length === 0) return { leafUnits: 0, centers: [] };
+    let cursor = 0;
+    const firstCenters = rounds[0].map((match) => {
+      const realParticipants = [match.aStatus, match.bStatus].filter((status) => status === "ready").length;
+      const weight = Math.max(1, realParticipants);
+      const center = cursor + weight / 2;
+      cursor += weight;
+      return center;
+    });
+    const centers = [firstCenters];
+    for (let roundIndex = 1; roundIndex < rounds.length; roundIndex += 1) {
+      const previous = centers[roundIndex - 1];
+      centers.push(rounds[roundIndex].map((_, matchIndex) => {
+        const upper = previous[matchIndex * 2];
+        const lower = previous[matchIndex * 2 + 1];
+        return (upper + lower) / 2;
+      }));
+    }
+    return { leafUnits: cursor, centers };
+  }
+
+  function normalizeScore(value) {
+    if (value == null || value === "") return null;
+    const score = Number(value);
+    return Number.isInteger(score) && score >= 0 && score <= 999 ? score : null;
+  }
+
   function createDraw(participants, random = Math.random) {
     validateParticipants(participants);
     const size = nextPowerOfTwo(participants.length);
@@ -160,7 +188,8 @@
         const bEntry = entrants[i + 1] ?? { id: null, status: "bye" };
         const a = aEntry.status === "ready" ? aEntry.id : null;
         const b = bEntry.status === "ready" ? bEntry.id : null;
-        const oldWinner = priorRounds[roundIndex]?.[i / 2]?.winnerId ?? null;
+        const oldMatch = priorRounds[roundIndex]?.[i / 2];
+        const oldWinner = oldMatch?.winnerId ?? null;
         let winnerId = null;
         let automatic = false;
         let outputStatus = "pending";
@@ -178,6 +207,7 @@
           winnerId = oldWinner === a || oldWinner === b ? oldWinner : null;
           outputStatus = winnerId ? "ready" : "pending";
         }
+        const sameEntrants = oldMatch?.a === a && oldMatch?.b === b;
         matches.push({
           id: `r${roundIndex}-m${i / 2}`,
           a,
@@ -187,6 +217,8 @@
           winnerId,
           automatic,
           outputStatus,
+          scoreA: sameEntrants && aEntry.status === "ready" ? normalizeScore(oldMatch.scoreA) : null,
+          scoreB: sameEntrants && bEntry.status === "ready" ? normalizeScore(oldMatch.scoreB) : null,
         });
       }
       rounds.push(matches);
@@ -206,10 +238,26 @@
     const next = rounds.map((round) => round.map((match) => ({ ...match })));
     next[roundIndex][matchIndex].winnerId = winnerId;
     for (let r = roundIndex + 1; r < next.length; r += 1) {
-      next[r].forEach((match) => { match.winnerId = null; });
+      next[r].forEach((match) => {
+        match.winnerId = null;
+        match.scoreA = null;
+        match.scoreB = null;
+      });
     }
     return buildBracket(slots, next);
   }
 
-  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, hasAdvancedWinner, createDisplayRounds, getTargetSlotIndex, createDraw, createManualSlots, buildBracket, setWinner };
+  function setScore(rounds, roundIndex, matchIndex, side, value) {
+    if (side !== "a" && side !== "b") throw new Error("スコアの入力先が不正です。");
+    const target = rounds[roundIndex]?.[matchIndex];
+    const status = side === "a" ? target?.aStatus : target?.bStatus;
+    if (!target || status !== "ready") throw new Error("未確定の参加者にはスコアを入力できません。");
+    const score = normalizeScore(value);
+    if (value !== "" && value != null && score == null) throw new Error("スコアは0から999までの整数で入力してください。");
+    const next = rounds.map((round) => round.map((match) => ({ ...match })));
+    next[roundIndex][matchIndex][side === "a" ? "scoreA" : "scoreB"] = score;
+    return next;
+  }
+
+  return { nextPowerOfTwo, seedOrder, shuffle, validateParticipants, assignSeed, hasAdvancedWinner, createDisplayRounds, getTargetSlotIndex, createBracketLayout, createDraw, createManualSlots, buildBracket, setWinner, setScore };
 });

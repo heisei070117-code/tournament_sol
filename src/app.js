@@ -2,6 +2,8 @@
   "use strict";
   const E = window.TournamentEngine;
   const STORAGE_KEY = "bracket-studio-v1";
+  const LAYOUT_UNIT = 58;
+  const MATCH_HEIGHT = 94;
   const $ = (selector) => document.querySelector(selector);
   const refs = {
     name: $("#tournamentName"), input: $("#participantInput"), seedCount: $("#seedCount"),
@@ -56,6 +58,13 @@
     );
     if (radius < 1) return `M ${startX} ${startY} H ${laneX} V ${outerY} H ${targetX} V ${targetY}`;
     return `M ${startX} ${startY} H ${laneX - radius} Q ${laneX} ${startY} ${laneX} ${startY + firstDirection * radius} V ${outerY - firstDirection * radius} Q ${laneX} ${outerY} ${laneX + radius} ${outerY} H ${targetX - radius} Q ${targetX} ${outerY} ${targetX} ${outerY + finalDirection * radius} V ${targetY}`;
+  }
+
+  function singleBendConnectorPath(startX, startY, targetX, targetY) {
+    const direction = targetY >= startY ? 1 : -1;
+    const radius = Math.min(6, Math.max(0, targetX - startX) / 2, Math.abs(targetY - startY) / 2);
+    if (radius < 1) return `M ${startX} ${startY} H ${targetX} V ${targetY}`;
+    return `M ${startX} ${startY} H ${targetX - radius} Q ${targetX} ${startY} ${targetX} ${startY + direction * radius} V ${targetY}`;
   }
 
   function save() {
@@ -191,14 +200,19 @@
     const p = participant(id);
     if (!p) {
       const pending = status === "pending";
-      return `<button class="competitor ${pending ? "pending" : "bye"}" disabled><span class="name">${pending ? "対戦相手未確定" : "BYE"}</span></button>`;
+      return `<div class="competitor ${pending ? "pending" : "bye"}"><span class="name">${pending ? "対戦相手未確定" : "BYE"}</span></div>`;
     }
     const canChoose = match.aStatus === "ready" && match.bStatus === "ready";
     const winner = match.winnerId === id;
-    return `<button class="competitor ${winner ? "winner" : ""}" data-winner="${esc(id)}" ${canChoose ? "" : "disabled"} aria-label="${esc(p.name)}を勝者にする">
-      ${p.seed ? `<span class="seed-badge">${p.seed}</span>` : `<span class="seed-badge">${side}</span>`}
-      <span class="name">${esc(p.name)}</span>${winner ? '<span class="check">✓</span>' : ""}
-    </button>`;
+    const score = side === "A" ? match.scoreA : match.scoreB;
+    const scoreSide = side.toLowerCase();
+    return `<div class="competitor ${winner ? "winner" : ""}">
+      <button class="competitor-pick" data-winner="${esc(id)}" ${canChoose ? "" : "disabled"} aria-label="${esc(p.name)}を勝者にする">
+        ${p.seed ? `<span class="seed-badge">${p.seed}</span>` : `<span class="seed-badge">${side}</span>`}
+        <span class="name">${esc(p.name)}</span>${winner ? '<span class="check">✓</span>' : ""}
+      </button>
+      <input class="score-input" data-score-side="${scoreSide}" type="number" min="0" max="999" step="1" inputmode="numeric" value="${score ?? ""}" ${canChoose ? "" : "disabled"} aria-label="${esc(p.name)}のスコア">
+    </div>`;
   }
 
   function drawConnectors() {
@@ -262,8 +276,11 @@
           const targetY = (targetSlot === 0 ? targetRect.top : targetRect.bottom) - bracketRect.top;
           const outerY = targetY + (targetSlot === 0 ? -14 : 14);
           const laneX = targetRect.left - bracketRect.left - (targetSlot === 0 ? 30 : 16);
+          const hasClearApproach = targetSlot === 0 ? joinY <= targetY - 8 : joinY >= targetY + 8;
           appendPath(
-            cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY),
+            hasClearApproach
+              ? singleBendConnectorPath(joinX, joinY, targetX, targetY)
+              : cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY),
             E.hasAdvancedWinner(sourceMatch),
           );
         } else {
@@ -290,24 +307,41 @@
     refs.scroller.hidden = !state.rounds.length;
     if (!state.rounds.length) { refs.bracket.innerHTML = ""; return; }
     const displayRounds = E.createDisplayRounds(state.rounds);
+    const layout = E.createBracketLayout(state.rounds);
+    const contentHeight = layout.leafUnits * LAYOUT_UNIT;
+    const bracketHeight = Math.max(590, contentHeight);
+    const layoutOffset = (bracketHeight - contentHeight) / 2;
+    refs.bracket.style.setProperty("--bracket-height", `${bracketHeight}px`);
     const preliminaryCount = displayRounds[0]?.isPreliminary ? displayRounds[0].matches.length : 0;
     refs.meta.textContent = `${n} PARTICIPANTS · ${preliminaryCount ? `${preliminaryCount} PRELIMINARY MATCHES · ` : ""}${roundCount} ROUNDS${state.mode === "manual" ? " · MANUAL" : ""}`;
     refs.bracket.innerHTML = displayRounds.map((displayRound) => {
       const { roundIndex } = displayRound;
       const round = state.rounds[roundIndex];
-      const matches = displayRound.matches.map(({ match, matchIndex }, displayMatchIndex) => `<article class="match ${match.winnerId ? "complete" : ""} ${roundIndex === state.rounds.length - 1 ? "final-match" : ""}" data-round="${roundIndex}" data-match="${matchIndex}">
+      const matches = displayRound.matches.map(({ match, matchIndex }, displayMatchIndex) => {
+        const top = layoutOffset + layout.centers[roundIndex][matchIndex] * LAYOUT_UNIT - MATCH_HEIGHT / 2;
+        return `<article class="match ${match.winnerId ? "complete" : ""} ${roundIndex === state.rounds.length - 1 ? "final-match" : ""}" style="top:${top}px" data-round="${roundIndex}" data-match="${matchIndex}">
         <div class="match-label"><span>MATCH ${displayMatchIndex + 1}</span><span>${match.automatic ? "AUTO" : "BO1"}</span></div>
         ${competitorButton(match.a, match.aStatus, match, "A")}${competitorButton(match.b, match.bStatus, match, "B")}
-      </article>`).join("");
+      </article>`;
+      }).join("");
       const championId = roundIndex === state.rounds.length - 1 ? round[0]?.winnerId : null;
       const visibleCount = displayRound.matches.length;
       const matchSummary = displayRound.isPreliminary ? `${visibleCount} PLAY-IN MATCH${visibleCount > 1 ? "ES" : ""}` : `${round.length} MATCH${round.length > 1 ? "ES" : ""}`;
-      return `<section class="round ${displayRound.isPreliminary ? "preliminary-round" : ""}" data-round="${roundIndex}"><div class="round-title"><strong>${roundName(round, displayRound)}</strong>${matchSummary}</div><div class="round-matches">${matches}</div>${championId ? `<div class="champion"><small>CHAMPION</small><strong>${esc(participant(championId)?.name)}</strong></div>` : ""}</section>`;
+      const championTop = layoutOffset + layout.centers[roundIndex][0] * LAYOUT_UNIT + MATCH_HEIGHT / 2 + 14;
+      const champion = championId ? `<div class="champion" style="top:${championTop}px"><small>CHAMPION</small><strong>${esc(participant(championId)?.name)}</strong></div>` : "";
+      return `<section class="round ${displayRound.isPreliminary ? "preliminary-round" : ""}" data-round="${roundIndex}"><div class="round-title"><strong>${roundName(round, displayRound)}</strong>${matchSummary}</div><div class="round-matches">${matches}${champion}</div></section>`;
     }).join("");
     refs.bracket.querySelectorAll("[data-winner]").forEach((button) => button.addEventListener("click", () => {
       const matchNode = button.closest(".match");
       try {
         state.rounds = E.setWinner(state.slots, state.rounds, Number(matchNode.dataset.round), Number(matchNode.dataset.match), button.dataset.winner);
+        renderBracket(); save();
+      } catch (error) { showToast(error.message, true); }
+    }));
+    refs.bracket.querySelectorAll("[data-score-side]").forEach((input) => input.addEventListener("change", () => {
+      const matchNode = input.closest(".match");
+      try {
+        state.rounds = E.setScore(state.rounds, Number(matchNode.dataset.round), Number(matchNode.dataset.match), input.dataset.scoreSide, input.value);
         renderBracket(); save();
       } catch (error) { showToast(error.message, true); }
     }));
@@ -340,24 +374,27 @@
   function exportSvg() {
     if (!state.rounds.length) { showToast("先にトーナメントを作成してください。", true); return; }
     const displayRounds = E.createDisplayRounds(state.rounds);
-    const largestVisibleRound = Math.max(...displayRounds.map((displayRound) => displayRound.matches.length));
+    const layout = E.createBracketLayout(state.rounds);
+    const layoutContentHeight = layout.leafUnits * LAYOUT_UNIT;
+    const svgBracketHeight = Math.max(410, layoutContentHeight);
+    const layoutOffset = (svgBracketHeight - layoutContentHeight) / 2;
     const colWidth = 250;
     const width = displayRounds.length * colWidth + 70;
-    const height = Math.max(500, largestVisibleRound * 110 + 90);
+    const height = svgBracketHeight + 90;
     const xml = (value) => esc(value);
     let content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f4f6f9"/><style>text{font-family:Arial,sans-serif;fill:#14213d}.head{font-weight:700;font-size:13px}.name{font-size:11px}.muted{fill:#8993a3;font-size:9px}.win{fill:#087d89;font-weight:700}</style><text x="30" y="28" class="head">${xml(state.name)}</text>`;
     displayRounds.forEach((displayRound, displayIndex) => {
       const round = state.rounds[displayRound.roundIndex];
       const x = 30 + displayIndex * colWidth;
       content += `<text x="${x}" y="54" class="muted">${roundName(round, displayRound)}</text>`;
-      displayRound.matches.forEach(({ match, matchIndex }, visibleMatchIndex) => {
-        const spacing = (height - 90) / displayRound.matches.length;
-        const y = 70 + visibleMatchIndex * spacing + spacing / 2 - 30;
+      displayRound.matches.forEach(({ match, matchIndex }) => {
+        const y = 70 + layoutOffset + layout.centers[displayRound.roundIndex][matchIndex] * LAYOUT_UNIT - 31;
         content += `<rect x="${x}" y="${y}" width="190" height="62" rx="6" fill="white" stroke="#cfd6e0"/><line x1="${x}" y1="${y + 31}" x2="${x + 190}" y2="${y + 31}" stroke="#e5e9ef"/>`;
-        [[match.a, match.aStatus, y + 20], [match.b, match.bStatus, y + 51]].forEach(([id, status, ty]) => {
+        [[match.a, match.aStatus, match.scoreA, y + 20], [match.b, match.bStatus, match.scoreB, y + 51]].forEach(([id, status, score, ty]) => {
           const p = participant(id); const cls = match.winnerId === id ? "name win" : "name";
           const fallback = status === "pending" ? "対戦相手未確定" : "BYE";
           content += `<text x="${x + 10}" y="${ty}" class="${cls}">${xml(p ? `${p.seed ? `[${p.seed}] ` : ""}${p.name}` : fallback)}</text>`;
+          if (p && score != null) content += `<text x="${x + 180}" y="${ty}" text-anchor="end" class="${cls}">${score}</text>`;
         });
         const startX = x + 190;
         const joinX = startX + 14;
@@ -375,18 +412,21 @@
           const targetMatchIndex = Math.floor(matchIndex / 2);
           const targetVisibleIndex = nextDisplayRound.matches.findIndex((entry) => entry.matchIndex === targetMatchIndex);
           if (targetVisibleIndex < 0) return;
-          const nextSpacing = (height - 90) / nextDisplayRound.matches.length;
-          const nextCardY = 70 + targetVisibleIndex * nextSpacing + nextSpacing / 2 - 30;
+          const nextCardY = 70 + layoutOffset + layout.centers[nextDisplayRound.roundIndex][targetMatchIndex] * LAYOUT_UNIT - 31;
           const targetSlot = E.getTargetSlotIndex(matchIndex);
           const nextCardX = x + colWidth;
           const targetX = nextCardX + 95;
           const targetY = nextCardY + (targetSlot === 0 ? 0 : 62);
           const outerY = targetY + (targetSlot === 0 ? -14 : 14);
           const laneX = nextCardX - (targetSlot === 0 ? 30 : 16);
+          const hasClearApproach = targetSlot === 0 ? joinY <= targetY - 8 : joinY >= targetY + 8;
           const hasAdvanced = E.hasAdvancedWinner(match);
           const lineColor = hasAdvanced ? "#df3348" : "#9ca8b8";
           const lineWidth = hasAdvanced ? "2.5" : "1.5";
-          content += `<path d="${cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY)}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
+          const connectorPath = hasClearApproach
+            ? singleBendConnectorPath(joinX, joinY, targetX, targetY)
+            : cardEdgeConnectorPath(joinX, joinY, laneX, outerY, targetX, targetY);
+          content += `<path d="${connectorPath}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
         } else {
           const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
           const lineWidth = match.winnerId ? "2.5" : "1.5";

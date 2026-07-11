@@ -121,3 +121,29 @@ test("adjacent matches connect to the top and bottom slots of the same next matc
   assert.equal(engine.getTargetSlotIndex(12), 0);
   assert.equal(engine.getTargetSlotIndex(13), 1);
 });
+
+test("tree layout centers every later match between its two feeder matches", () => {
+  const rounds = engine.buildBracket(engine.createDraw(players(29, 8), () => 0.42));
+  const layout = engine.createBracketLayout(rounds);
+  assert.equal(layout.leafUnits, 29);
+  for (let roundIndex = 1; roundIndex < rounds.length; roundIndex += 1) {
+    layout.centers[roundIndex].forEach((center, matchIndex) => {
+      const upper = layout.centers[roundIndex - 1][matchIndex * 2];
+      const lower = layout.centers[roundIndex - 1][matchIndex * 2 + 1];
+      assert.equal(center, (upper + lower) / 2);
+    });
+  }
+});
+
+test("scores are stored per team and preserved while entrants stay the same", () => {
+  const slots = ["p1", null, "p2", "p3"];
+  let rounds = engine.buildBracket(slots);
+  rounds = engine.setScore(rounds, 0, 1, "a", 2);
+  rounds = engine.setScore(rounds, 0, 1, "b", 1);
+  assert.equal(rounds[0][1].scoreA, 2);
+  assert.equal(rounds[0][1].scoreB, 1);
+  rounds = engine.setWinner(slots, rounds, 0, 1, "p2");
+  assert.equal(rounds[0][1].scoreA, 2);
+  assert.equal(rounds[0][1].scoreB, 1);
+  assert.throws(() => engine.setScore(rounds, 0, 1, "a", -1), /0から999/);
+});
