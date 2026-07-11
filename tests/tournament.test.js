@@ -90,15 +90,10 @@ test("seed assignment clearly swaps seeded teams and replaces with unseeded team
   assert.equal(entrants.filter((p) => p.seed != null).length, 2);
 });
 
-test("a connector is red only when its team wins the destination match", () => {
-  const sourceWinner = { winnerId: "p1" };
-  const otherSourceWinner = { winnerId: "p2" };
-  const decidedTarget = { winnerId: "p1" };
-  const undecidedTarget = { winnerId: null };
-
-  assert.equal(engine.isWinningPath(sourceWinner, decidedTarget), true);
-  assert.equal(engine.isWinningPath(otherSourceWinner, decidedTarget), false);
-  assert.equal(engine.isWinningPath(sourceWinner, undecidedTarget), false);
+test("an outgoing connector becomes active when its source match has a winner", () => {
+  assert.equal(engine.hasAdvancedWinner({ winnerId: "p1" }), true);
+  assert.equal(engine.hasAdvancedWinner({ winnerId: null }), false);
+  assert.equal(engine.hasAdvancedWinner(null), false);
 });
 
 test("34-team display shows two preliminary matches instead of thirty bye cards", () => {

@@ -82,7 +82,7 @@ button { cursor: pointer; }
 .bracket-scroller { overflow: auto; padding: 5px 5px 32px; }
 .bracket { position: relative; display: flex; align-items: stretch; gap: 72px; min-width: max-content; min-height: 590px; padding-right: 42px; }
 .bracket-connectors { position: absolute; inset: 0; z-index: 0; overflow: visible; pointer-events: none; }
-.connector-path { fill: none; stroke: #9ca8b8; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.connector-path { fill: none; stroke: #9ca8b8; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .connector-path.advanced { stroke: #df3348; stroke-width: 2.5; }
 .round { position: relative; z-index: 1; display: flex; flex-direction: column; width: 210px; }
 .round-title { height: 42px; margin-bottom: 8px; border-bottom: 2px solid #cdd4df; color: #67758a; font-size: 10px; font-weight: 900; letter-spacing: .12em; }

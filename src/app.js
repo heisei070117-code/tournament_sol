@@ -44,6 +44,18 @@
     return `ROUND OF ${entrants}`;
   }
 
+  function orthogonalConnectorPath(startX, startY, bendX, targetY, targetX) {
+    const direction = targetY >= startY ? 1 : -1;
+    const radius = Math.min(
+      7,
+      Math.abs(targetY - startY) / 2,
+      Math.max(0, bendX - startX) / 2,
+      Math.max(0, targetX - bendX) / 2,
+    );
+    if (radius < 1) return `M ${startX} ${startY} H ${bendX} V ${targetY} H ${targetX}`;
+    return `M ${startX} ${startY} H ${bendX - radius} Q ${bendX} ${startY} ${bendX} ${startY + direction * radius} V ${targetY - direction * radius} Q ${bendX} ${targetY} ${bendX + radius} ${targetY} H ${targetX}`;
+  }
+
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     refs.saveStatus.textContent = `保存済み ${new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`;
@@ -212,7 +224,6 @@
       const currentRoundNode = roundNodes[displayIndex];
       const nextRoundNode = roundNodes[displayIndex + 1] ?? null;
       const roundIndex = Number(currentRoundNode.dataset.round);
-      const nextRoundIndex = nextRoundNode ? Number(nextRoundNode.dataset.round) : null;
       const currentMatches = [...currentRoundNode.querySelectorAll(".match")];
       currentMatches.forEach((matchNode) => {
         const matchIndex = Number(matchNode.dataset.match);
@@ -242,16 +253,15 @@
         if (nextRoundNode) {
           const targetMatchIndex = Math.floor(matchIndex / 2);
           const nextNode = nextRoundNode.querySelector(`.match[data-match="${targetMatchIndex}"]`);
-          const targetCompetitor = nextNode?.querySelectorAll(".competitor")[E.getTargetSlotIndex(matchIndex)];
-          if (!nextNode || !targetCompetitor) return;
-          const targetRect = targetCompetitor.getBoundingClientRect();
+          if (!nextNode) return;
+          const targetRect = nextNode.getBoundingClientRect();
+          const targetSlot = E.getTargetSlotIndex(matchIndex);
           const targetX = targetRect.left - bracketRect.left;
-          const targetY = targetRect.top - bracketRect.top + targetRect.height / 2;
-          const elbowX = joinX + (targetX - joinX) / 2;
-          const targetMatch = state.rounds[nextRoundIndex]?.[targetMatchIndex];
+          const targetY = (targetSlot === 0 ? targetRect.top + 3 : targetRect.bottom - 3) - bracketRect.top;
+          const bendX = targetX - (targetSlot === 0 ? 30 : 16);
           appendPath(
-            `M ${joinX} ${joinY} H ${elbowX} V ${targetY} H ${targetX}`,
-            E.isWinningPath(sourceMatch, targetMatch),
+            orthogonalConnectorPath(joinX, joinY, bendX, targetY, targetX),
+            E.hasAdvancedWinner(sourceMatch),
           );
         } else {
           // 決勝は次戦がないため、合流点から短い優勝ラインを出す。
@@ -359,20 +369,19 @@
         }
         if (displayIndex < displayRounds.length - 1) {
           const nextDisplayRound = displayRounds[displayIndex + 1];
-          const nextRound = state.rounds[nextDisplayRound.roundIndex];
           const targetMatchIndex = Math.floor(matchIndex / 2);
           const targetVisibleIndex = nextDisplayRound.matches.findIndex((entry) => entry.matchIndex === targetMatchIndex);
           if (targetVisibleIndex < 0) return;
           const nextSpacing = (height - 90) / nextDisplayRound.matches.length;
           const nextCardY = 70 + targetVisibleIndex * nextSpacing + nextSpacing / 2 - 30;
-          const targetY = nextCardY + (E.getTargetSlotIndex(matchIndex) === 0 ? 16 : 47);
+          const targetSlot = E.getTargetSlotIndex(matchIndex);
+          const targetY = nextCardY + (targetSlot === 0 ? 3 : 59);
           const endX = x + colWidth;
-          const middle = joinX + (endX - joinX) / 2;
-          const targetMatch = nextRound[targetMatchIndex];
-          const isWinnerRoute = E.isWinningPath(match, targetMatch);
-          const lineColor = isWinnerRoute ? "#df3348" : "#9ca8b8";
-          const lineWidth = isWinnerRoute ? "2.5" : "1.5";
-          content += `<path d="M ${joinX} ${joinY} H ${middle} V ${targetY} H ${endX}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}"/>`;
+          const bendX = endX - (targetSlot === 0 ? 30 : 16);
+          const hasAdvanced = E.hasAdvancedWinner(match);
+          const lineColor = hasAdvanced ? "#df3348" : "#9ca8b8";
+          const lineWidth = hasAdvanced ? "2.5" : "1.5";
+          content += `<path d="${orthogonalConnectorPath(joinX, joinY, bendX, targetY, endX)}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
         } else {
           const lineColor = match.winnerId ? "#df3348" : "#9ca8b8";
           const lineWidth = match.winnerId ? "2.5" : "1.5";
